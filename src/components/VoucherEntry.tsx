@@ -1,0 +1,527 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Input } from './ui/input';
+import { Button } from './ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Label } from './ui/label';
+import { Plus, Trash2, Save, AlertCircle, Calendar as CalendarIcon, Upload, FileDown, Info } from 'lucide-react';
+import { getAccounts, saveVoucher, getNextVoucherNumber } from '../lib/store';
+import { AccountHead, Voucher, VoucherType, VoucherEntry as IVoucherEntry } from '../types';
+import { toast } from 'sonner';
+import { DatePicker } from './ui/date-picker';
+import { AccountSearch } from './AccountSearch';
+import { formatCurrency } from '../lib/utils';
+import Papa from 'papaparse';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "./ui/dialog";
+
+export default function VoucherEntry() {
+  const [accounts, setAccounts] = useState<AccountHead[]>([]);
+  const [activeTab, setActiveTab] = useState<VoucherType>('CRV');
+  
+  // Form States
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [description, setDescription] = useState('');
+  const [partyId, setPartyId] = useState('');
+  const [amount, setAmount] = useState('');
+  
+  // JV specific state
+  const [jvEntries, setJvEntries] = useState<IVoucherEntry[]>([
+    { accountId: '', debit: 0, credit: 0 },
+    { accountId: '', debit: 0, credit: 0 },
+  ]);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+
+  useEffect(() => {
+    setAccounts(getAccounts());
+  }, []);
+
+  const downloadTemplate = () => {
+    const csvContent = "date,type,description,account_name,debit,credit\n2026-04-11,JV,Office Rent,Rent Expense,500,0\n2026-04-11,JV,Office Rent,Cash,0,500";
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", "voucher_template.csv");
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleCsvUpload = (event: any) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const rows = results.data as any[];
+        if (rows.length === 0) {
+          toast.error("CSV file is empty");
+          return;
+        }
+
+        // Group rows by date, type, and description to form vouchers
+        const voucherGroups: Record<string, any[]> = {};
+        rows.forEach((row, index) => {
+          const groupKey = `${row.date}-${row.type}-${row.description}`;
+          if (!voucherGroups[groupKey]) {
+            voucherGroups[groupKey] = [];
+          }
+          voucherGroups[groupKey].push({ ...row, originalIndex: index + 2 });
+        });
+
+        let successCount = 0;
+        let errorCount = 0;
+
+        Object.values(voucherGroups).forEach((group) => {
+          try {
+            const firstRow = group[0];
+            const type = firstRow.type as VoucherType;
+            const date = firstRow.date;
+            const description = firstRow.description;
+
+            if (!['CRV', 'CPV', 'JV'].includes(type)) {
+              throw new Error(`Invalid voucher type: ${type}`);
+            }
+
+            const entries: IVoucherEntry[] = group.map(row => {
+              const account = accounts.find(a => a.name.toLowerCase() === row.account_name.trim().toLowerCase());
+              if (!account) {
+                throw new Error(`Account not found: ${row.account_name}`);
+              }
+              return {
+                accountId: account.id,
+                debit: parseFloat(row.debit) || 0,
+                credit: parseFloat(row.credit) || 0
+              };
+            });
+
+            // Basic validation
+            const totalDebit = entries.reduce((sum, e) => sum + e.debit, 0);
+            const totalCredit = entries.reduce((sum, e) => sum + e.credit, 0);
+
+            if (Math.abs(totalDebit - totalCredit) > 0.01) {
+              throw new Error(`Voucher out of balance: ${description}`);
+            }
+
+            const newVoucher: Voucher = {
+              id: crypto.randomUUID(),
+              type,
+              date,
+              description,
+              entries,
+              voucherNumber: getNextVoucherNumber(type),
+            };
+
+            saveVoucher(newVoucher);
+            successCount++;
+          } catch (err: any) {
+            console.error(err);
+            errorCount++;
+            toast.error(`Error in group "${group[0].description}": ${err.message}`);
+          }
+        });
+
+        if (successCount > 0) {
+          toast.success(`Successfully imported ${successCount} vouchers`);
+          setIsImportDialogOpen(false);
+        }
+        if (errorCount > 0) {
+          toast.error(`Failed to import ${errorCount} vouchers`);
+        }
+      },
+      error: (error) => {
+        toast.error(`CSV Parsing Error: ${error.message}`);
+      }
+    });
+  };
+
+  const resetForm = () => {
+    setDescription('');
+    setPartyId('');
+    setAmount('');
+    setJvEntries([
+      { accountId: '', debit: 0, credit: 0 },
+      { accountId: '', debit: 0, credit: 0 },
+    ]);
+  };
+
+  const handleSave = () => {
+    if (!description.trim()) {
+      toast.error('Please enter a valid description');
+      return;
+    }
+
+    if (!date) {
+      toast.error('Please select a transaction date');
+      return;
+    }
+
+    let entries: IVoucherEntry[] = [];
+
+    if (activeTab === 'CRV' || activeTab === 'CPV') {
+      if (!partyId) {
+        toast.error('Please select a party/account');
+        return;
+      }
+      
+      const val = parseFloat(amount);
+      if (isNaN(val) || val <= 0) {
+        toast.error('Please enter a valid amount greater than zero');
+        return;
+      }
+
+      if (activeTab === 'CRV') {
+        entries = [
+          { accountId: 'cash-001', debit: val, credit: 0 },
+          { accountId: partyId, debit: 0, credit: val },
+        ];
+      } else {
+        entries = [
+          { accountId: partyId, debit: val, credit: 0 },
+          { accountId: 'cash-001', debit: 0, credit: val },
+        ];
+      }
+    } else if (activeTab === 'JV') {
+      // Filter out empty rows or rows with zero amounts
+      const validEntries = jvEntries.filter(e => e.accountId && (Math.abs(e.debit) > 0 || Math.abs(e.credit) > 0));
+      
+      if (validEntries.length < 2) {
+        toast.error('JV must have at least two valid entries');
+        return;
+      }
+
+      // Check for negative values
+      const hasNegative = validEntries.some(e => e.debit < 0 || e.credit < 0);
+      if (hasNegative) {
+        toast.error('Debit and Credit amounts cannot be negative');
+        return;
+      }
+
+      const totalDebit = validEntries.reduce((sum, e) => sum + e.debit, 0);
+      const totalCredit = validEntries.reduce((sum, e) => sum + e.credit, 0);
+
+      if (totalDebit === 0 || totalCredit === 0) {
+        toast.error('Voucher must have both debit and credit entries');
+        return;
+      }
+
+      // Handle floating point precision issues
+      if (Math.abs(totalDebit - totalCredit) > 0.01) {
+        toast.error(`Voucher is out of balance by ${formatCurrency(Math.abs(totalDebit - totalCredit))}`);
+        return;
+      }
+
+      entries = validEntries;
+    }
+
+    const newVoucher: Voucher = {
+      id: crypto.randomUUID(),
+      type: activeTab,
+      date,
+      description,
+      entries,
+      voucherNumber: getNextVoucherNumber(activeTab),
+    };
+
+    saveVoucher(newVoucher);
+    toast.success(`${activeTab} saved successfully: ${newVoucher.voucherNumber}`);
+    resetForm();
+  };
+
+  const addJvRow = () => {
+    setJvEntries([...jvEntries, { accountId: '', debit: 0, credit: 0 }]);
+  };
+
+  const removeJvRow = (index: number) => {
+    if (jvEntries.length <= 2) return;
+    const newEntries = [...jvEntries];
+    newEntries.splice(index, 1);
+    setJvEntries(newEntries);
+  };
+
+  const updateJvEntry = (index: number, field: keyof IVoucherEntry, value: any) => {
+    const newEntries = [...jvEntries];
+    newEntries[index] = { ...newEntries[index], [field]: value };
+    setJvEntries(newEntries);
+  };
+
+  const totalDebit = jvEntries.reduce((sum, e) => sum + e.debit, 0);
+  const totalCredit = jvEntries.reduce((sum, e) => sum + e.credit, 0);
+  const isBalanced = totalDebit === totalCredit && totalDebit > 0;
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-8 pb-12">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-6">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight text-slate-900 mb-1">Data Entry</h2>
+          <p className="text-sm text-slate-500">Initialize and authorize financial transaction records.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+            <DialogTrigger
+              render={
+                <Button variant="outline" className="h-9 px-4 flex items-center gap-2 brutal-btn text-xs font-bold uppercase tracking-wider">
+                  <Upload className="w-4 h-4" /> Bulk Import
+                </Button>
+              }
+            />
+            <DialogContent className="sm:max-w-[500px] bg-white rounded-none border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+              <DialogHeader>
+                <DialogTitle className="text-xl font-black uppercase tracking-tight">Bulk Voucher Import</DialogTitle>
+                <DialogDescription className="text-slate-500 font-medium">
+                  Upload a structured CSV file to create multiple vouchers at once.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-6 py-4">
+                <div className="bg-blue-50 border-2 border-blue-200 p-4 flex gap-3">
+                  <Info className="w-5 h-5 text-blue-600 shrink-0" />
+                  <div className="text-xs text-blue-800 space-y-1">
+                    <p className="font-bold uppercase tracking-wider">CSV Structure Requirements:</p>
+                    <ul className="list-disc list-inside space-y-0.5 opacity-90">
+                      <li>Headers: date, type, description, account_name, debit, credit</li>
+                      <li>Type: CRV (Receipt), CPV (Payment), JV (Journal)</li>
+                      <li>Vouchers are grouped by date, type, and description</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-4">
+                  <Button 
+                    variant="outline" 
+                    onClick={downloadTemplate}
+                    className="w-full justify-start gap-3 h-12 border-2 border-black rounded-none hover:bg-slate-50 font-bold uppercase text-xs tracking-widest"
+                  >
+                    <FileDown className="w-5 h-5" /> Download CSV Template
+                  </Button>
+                  
+                  <div className="relative">
+                    <input
+                      type="file"
+                      accept=".csv"
+                      onChange={handleCsvUpload}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                    />
+                    <Button className="w-full h-12 brutal-btn-primary gap-3 pointer-events-none">
+                      <Upload className="w-5 h-5" /> Select CSV File to Upload
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          <div className="px-3 py-1.5 border border-slate-200 bg-white text-xs font-semibold text-slate-600 uppercase tracking-wider rounded-full shadow-sm">
+            Mode: Manual Override
+          </div>
+        </div>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as VoucherType)} className="w-full">
+        <TabsList className="w-full justify-start h-auto p-1 bg-slate-100 rounded-xl mb-8 gap-1">
+          <TabsTrigger 
+            value="CRV" 
+            className="px-6 py-2.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm font-semibold uppercase text-xs tracking-wider transition-all"
+          >
+            Cash Receipt
+          </TabsTrigger>
+          <TabsTrigger 
+            value="CPV" 
+            className="px-6 py-2.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm font-semibold uppercase text-xs tracking-wider transition-all"
+          >
+            Cash Payment
+          </TabsTrigger>
+          <TabsTrigger 
+            value="JV" 
+            className="px-6 py-2.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm font-semibold uppercase text-xs tracking-wider transition-all"
+          >
+            General Voucher
+          </TabsTrigger>
+        </TabsList>
+
+        <div className="mt-8 space-y-6">
+          <div className="grid grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <Label htmlFor="date" className="text-xs font-semibold uppercase tracking-wider text-slate-500">Transaction Date</Label>
+              <DatePicker date={date} setDate={setDate} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="desc" className="text-xs font-semibold uppercase tracking-wider text-slate-500">Description / Narration</Label>
+              <Input id="desc" placeholder="Enter transaction details..." value={description} onChange={(e) => setDescription(e.target.value)} className="bg-white border-slate-200 rounded-lg h-10" />
+            </div>
+          </div>
+
+          <TabsContent value="CRV" className="mt-0">
+            <Card className="glass-card bg-white">
+              <CardHeader className="border-b border-slate-100">
+                <CardTitle className="text-sm font-bold uppercase tracking-wider text-slate-700">Record Cash Received</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold uppercase tracking-wider text-slate-500">From Party / Account</Label>
+                    <AccountSearch 
+                      accounts={accounts.filter(a => !a.isSystem)} 
+                      value={partyId} 
+                      onValueChange={setPartyId} 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Amount</Label>
+                    <Input 
+                      type="number" 
+                      step="0.01"
+                      min="0.01"
+                      placeholder="0.00" 
+                      value={amount} 
+                      onChange={(e) => setAmount(e.target.value)} 
+                      className="bg-white border-slate-200 rounded-lg h-10 font-medium" 
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="CPV" className="mt-0">
+            <Card className="glass-card bg-white">
+              <CardHeader className="border-b border-slate-100">
+                <CardTitle className="text-sm font-bold uppercase tracking-wider text-slate-700">Record Cash Paid</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold uppercase tracking-wider text-slate-500">To Party / Account</Label>
+                    <AccountSearch 
+                      accounts={accounts.filter(a => !a.isSystem)} 
+                      value={partyId} 
+                      onValueChange={setPartyId} 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Amount</Label>
+                    <Input 
+                      type="number" 
+                      step="0.01"
+                      min="0.01"
+                      placeholder="0.00" 
+                      value={amount} 
+                      onChange={(e) => setAmount(e.target.value)} 
+                      className="bg-white border-slate-200 rounded-lg h-10 font-medium" 
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="JV" className="mt-0">
+            <Card className="glass-card bg-white">
+              <CardHeader className="border-b border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <CardTitle className="text-sm font-bold uppercase tracking-wider text-slate-700">Journal Voucher Entries</CardTitle>
+                <Button variant="outline" size="sm" onClick={addJvRow} className="gap-2 w-full sm:w-auto border border-slate-200 font-bold uppercase text-[10px]">
+                  <Plus className="w-4 h-4" /> Add Row
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="hidden sm:grid grid-cols-12 gap-4 mb-2 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  <div className="col-span-6">Account Head</div>
+                  <div className="col-span-2">Debit</div>
+                  <div className="col-span-2">Credit</div>
+                  <div className="col-span-2"></div>
+                </div>
+                
+                <div className="space-y-4 sm:space-y-2">
+                  {jvEntries.map((entry, index) => (
+                    <div key={index} className="flex flex-col sm:grid sm:grid-cols-12 gap-3 sm:gap-4 items-start sm:items-center p-4 sm:p-0 rounded-xl border border-slate-100 sm:border-none bg-slate-50/50 sm:bg-transparent">
+                      <div className="w-full sm:col-span-6">
+                        <Label className="sm:hidden mb-1.5 block text-xs font-semibold text-slate-500">Account Head</Label>
+                        <AccountSearch 
+                          accounts={accounts} 
+                          value={entry.accountId} 
+                          onValueChange={(v) => updateJvEntry(index, 'accountId', v)} 
+                        />
+                      </div>
+                      <div className="w-full sm:col-span-2">
+                        <Label className="sm:hidden mb-1.5 block text-xs font-semibold text-slate-500">Debit</Label>
+                        <Input 
+                          type="number" 
+                          step="0.01"
+                          min="0"
+                          placeholder="0.00"
+                          value={entry.debit || ''} 
+                          onChange={(e) => updateJvEntry(index, 'debit', parseFloat(e.target.value) || 0)}
+                          className="bg-white border-slate-200 rounded-lg h-10 font-medium"
+                        />
+                      </div>
+                      <div className="w-full sm:col-span-2">
+                        <Label className="sm:hidden mb-1.5 block text-xs font-semibold text-slate-500">Credit</Label>
+                        <Input 
+                          type="number" 
+                          step="0.01"
+                          min="0"
+                          placeholder="0.00"
+                          value={entry.credit || ''} 
+                          onChange={(e) => updateJvEntry(index, 'credit', parseFloat(e.target.value) || 0)}
+                          className="bg-white border-slate-200 rounded-lg h-10 font-medium"
+                        />
+                      </div>
+                      <div className="w-full sm:col-span-2 flex justify-end">
+                        <Button variant="ghost" size="sm" onClick={() => removeJvRow(index)} className="text-slate-400 hover:text-rose-600 w-full sm:w-auto gap-2 rounded-lg">
+                          <Trash2 className="w-4 h-4" />
+                          <span className="sm:hidden">Remove Row</span>
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+                  <div className="flex gap-8 w-full sm:w-auto justify-between sm:justify-start">
+                    <div className="space-y-1">
+                      <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Total Debit</p>
+                      <p className={`text-xl font-bold tracking-tight ${isBalanced ? 'text-slate-900' : 'text-slate-400'}`}>{formatCurrency(totalDebit)}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Total Credit</p>
+                      <p className={`text-xl font-bold tracking-tight ${isBalanced ? 'text-slate-900' : 'text-slate-400'}`}>{formatCurrency(totalCredit)}</p>
+                    </div>
+                  </div>
+                  
+                  {!isBalanced && totalDebit > 0 && (
+                    <div className="flex items-center gap-2 text-rose-600 text-[11px] font-bold uppercase bg-rose-50 px-4 py-2 rounded-lg border border-rose-100 w-full sm:w-auto">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>Balance Error: {formatCurrency(totalDebit - totalCredit)}</span>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
+            <Button variant="outline" onClick={resetForm} className="w-full sm:w-auto brutal-btn">Clear Form</Button>
+            <Button onClick={handleSave} className="w-full sm:w-auto gap-2 brutal-btn-primary">
+              <Save className="w-4 h-4" /> Save Voucher
+            </Button>
+          </div>
+        </div>
+      </Tabs>
+    </div>
+  );
+}

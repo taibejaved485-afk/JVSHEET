@@ -1,0 +1,135 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-serif: "Georgia", serif;
+  
+  --color-background: #F8FAFC;
+  --color-foreground: #0F172A;
+  --color-primary: #2563EB;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #64748B;
+  --color-accent: #F1F5F9;
+  --color-border: #E2E8F0;
+  --radius-lg: 0.75rem;
+  --radius-md: 0.5rem;
+  --radius-sm: 0.25rem;
+}
+
+@layer base {
+  body {
+    @apply bg-[#F8FAFC] text-[#0F172A] antialiased;
+  }
+}
+
+@layer utilities {
+  .glass-card {
+    @apply bg-white border border-[#E2E8F0] shadow-sm rounded-xl transition-all duration-200;
+  }
+
+  .glass-card:hover {
+    @apply shadow-md border-[#CBD5E1];
+  }
+
+  .brutal-btn {
+    @apply bg-white text-[#0F172A] border border-[#E2E8F0] px-4 py-2 font-semibold rounded-lg transition-all hover:bg-[#F1F5F9] active:scale-95;
+  }
+
+  .brutal-btn-primary {
+    @apply bg-[#2563EB] text-white px-4 py-2 font-semibold rounded-lg transition-all hover:bg-[#1D4ED8] active:scale-95 shadow-sm;
+  }
+
+  .brutal-btn-secondary {
+    @apply bg-[#64748B] text-white px-4 py-2 font-semibold rounded-lg transition-all hover:bg-[#475569] active:scale-95 shadow-sm;
+  }
+
+  .brutal-btn-black {
+    @apply bg-[#0F172A] text-white px-4 py-2 font-semibold rounded-lg transition-all hover:bg-[#1E293B] active:scale-95 shadow-sm;
+  }
+
+  .data-row {
+    @apply border-b border-[#F1F5F9] hover:bg-[#F8FAFC] transition-colors cursor-pointer;
+  }
+
+  .col-header {
+    @apply text-[11px] font-bold text-[#64748B] uppercase tracking-wider;
+  }
+
+  .mono-value {
+    @apply font-mono font-medium tracking-tight;
+  }
+}
+
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+:root {
+    --background: #ffffff;
+    --foreground: #000000;
+    --card: #ffffff;
+    --card-foreground: #000000;
+    --popover: #ffffff;
+    --popover-foreground: #000000;
+    --primary: #000000;
+    --primary-foreground: #ffffff;
+    --secondary: #f4f4f5;
+    --secondary-foreground: #000000;
+    --muted: #f4f4f5;
+    --muted-foreground: #71717a;
+    --accent: #f4f4f5;
+    --accent-foreground: #000000;
+    --destructive: #000000;
+    --border: #000000;
+    --input: #000000;
+    --ring: #000000;
+    --chart-1: #000000;
+    --chart-2: #333333;
+    --chart-3: #666666;
+    --chart-4: #999999;
+    --chart-5: #cccccc;
+    --radius: 0px;
+    --sidebar: #ffffff;
+    --sidebar-foreground: #000000;
+    --sidebar-primary: #000000;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #f4f4f5;
+    --sidebar-accent-foreground: #000000;
+    --sidebar-border: #000000;
+    --sidebar-ring: #000000;
+}
+
+.dark {
+    --background: #000000;
+    --foreground: #ffffff;
+    --card: #000000;
+    --card-foreground: #ffffff;
+    --popover: #000000;
+    --popover-foreground: #ffffff;
+    --primary: #ffffff;
+    --primary-foreground: #000000;
+    --secondary: #18181b;
+    --secondary-foreground: #ffffff;
+    --muted: #18181b;
+    --muted-foreground: #a1a1aa;
+    --accent: #18181b;
+    --accent-foreground: #ffffff;
+    --destructive: #ffffff;
+    --border: #ffffff;
+    --input: #ffffff;
+    --ring: #ffffff;
+    --chart-1: #ffffff;
+    --chart-2: #cccccc;
+    --chart-3: #999999;
+    --chart-4: #666666;
+    --chart-5: #333333;
+    --sidebar: #000000;
+    --sidebar-foreground: #ffffff;
+    --sidebar-primary: #ffffff;
+    --sidebar-primary-foreground: #000000;
+    --sidebar-accent: #18181b;
+    --sidebar-accent-foreground: #ffffff;
+    --sidebar-border: #ffffff;
+    --sidebar-ring: #ffffff;
+}
