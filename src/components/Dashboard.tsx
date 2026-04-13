@@ -104,7 +104,7 @@ export default function Dashboard() {
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         <Card className="glass-card group">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-500">Cash Liquidity</CardTitle>
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-500">Cash in Hand</CardTitle>
             <div className="p-2 rounded-lg bg-blue-50 text-blue-600">
               <Wallet className="w-4 h-4" />
             </div>
