@@ -11,7 +11,36 @@ const STORAGE_KEYS = {
 };
 
 const DEFAULT_ACCOUNTS: AccountHead[] = [
-  { id: 'cash-001', name: 'Cash Account', type: 'Asset', isSystem: true },
+  { id: 'cash-001', name: 'Cash Account', type: 'Asset', isSystem: true, logo: '💵' },
+  // Major Banks
+  { id: 'bank-hbl', name: 'HBL (Habib Bank)', type: 'Asset', logo: '🏦' },
+  { id: 'bank-meezan', name: 'Meezan Bank', type: 'Asset', logo: '🌙' },
+  { id: 'bank-alfalah', name: 'Bank Alfalah', type: 'Asset', logo: '🔴' },
+  { id: 'bank-ubl', name: 'UBL', type: 'Asset', logo: '🔵' },
+  { id: 'bank-mcb', name: 'MCB Bank', type: 'Asset', logo: '🟢' },
+  { id: 'bank-abl', name: 'Allied Bank', type: 'Asset', logo: '🏦' },
+  { id: 'bank-faysal', name: 'Faysal Bank', type: 'Asset', logo: '🏦' },
+  { id: 'bank-askari', name: 'Askari Bank', type: 'Asset', logo: '🏦' },
+  { id: 'bank-sc', name: 'Standard Chartered', type: 'Asset', logo: '🏦' },
+  { id: 'bank-alhabib', name: 'Bank AL Habib', type: 'Asset', logo: '🏦' },
+  { id: 'bank-habibmetro', name: 'Habib Metro', type: 'Asset', logo: '🏦' },
+  { id: 'bank-js', name: 'JS Bank', type: 'Asset', logo: '🏦' },
+  { id: 'bank-soneri', name: 'Soneri Bank', type: 'Asset', logo: '🏦' },
+  { id: 'bank-bop', name: 'Bank of Punjab', type: 'Asset', logo: '🏦' },
+  { id: 'bank-bok', name: 'Bank of Khyber', type: 'Asset', logo: '🏦' },
+  { id: 'bank-nbp', name: 'National Bank (NBP)', type: 'Asset', logo: '🇵🇰' },
+  { id: 'bank-albaraka', name: 'Al Baraka Bank', type: 'Asset', logo: '🏦' },
+  { id: 'bank-dib', name: 'Dubai Islamic Bank', type: 'Asset', logo: '🏦' },
+  { id: 'bank-samba', name: 'Samba Bank', type: 'Asset', logo: '🏦' },
+  { id: 'bank-silk', name: 'Silkbank', type: 'Asset', logo: '🏦' },
+  { id: 'bank-summit', name: 'Summit Bank', type: 'Asset', logo: '🏦' },
+  // Digital Wallets & Apps
+  { id: 'wallet-easypaisa', name: 'Easypaisa', type: 'Asset', logo: '📱' },
+  { id: 'wallet-jazzcash', name: 'JazzCash', type: 'Asset', logo: '📱' },
+  { id: 'wallet-sadapay', name: 'SadaPay', type: 'Asset', logo: '💳' },
+  { id: 'wallet-nayapay', name: 'NayaPay', type: 'Asset', logo: '💳' },
+  { id: 'wallet-finja', name: 'Finja', type: 'Asset', logo: '📱' },
+  
   { id: 'rent-001', name: 'Office Rent', type: 'Expense' },
   { id: 'sales-001', name: 'Sales Revenue', type: 'Revenue' },
 ];
@@ -22,7 +51,28 @@ export const getAccounts = (): AccountHead[] => {
     localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(DEFAULT_ACCOUNTS));
     return DEFAULT_ACCOUNTS;
   }
-  return JSON.parse(stored);
+  
+  const accounts: AccountHead[] = JSON.parse(stored);
+  
+  // Ensure all default accounts are present (useful for updates)
+  let hasChanges = false;
+  DEFAULT_ACCOUNTS.forEach(def => {
+    const existingIndex = accounts.findIndex(a => a.id === def.id);
+    if (existingIndex === -1) {
+      accounts.push(def);
+      hasChanges = true;
+    } else if (def.logo && accounts[existingIndex].logo !== def.logo) {
+      // Update logo if it's missing or different in existing account
+      accounts[existingIndex].logo = def.logo;
+      hasChanges = true;
+    }
+  });
+  
+  if (hasChanges) {
+    localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(accounts));
+  }
+  
+  return accounts;
 };
 
 export const saveAccount = (account: AccountHead) => {
@@ -109,6 +159,9 @@ export const getLedger = (accountId: string) => {
           debit: e.debit,
           credit: e.credit,
           balance: runningBalance,
+          attachment: v.attachment,
+          referenceNumber: v.referenceNumber,
+          paymentMethod: v.paymentMethod,
         });
       }
     });

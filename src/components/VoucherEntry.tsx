@@ -10,7 +10,7 @@ import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Label } from './ui/label';
-import { Plus, Trash2, Save, AlertCircle, Calendar as CalendarIcon, Upload, FileDown, Info } from 'lucide-react';
+import { Plus, Trash2, Save, AlertCircle, Calendar as CalendarIcon, Upload, FileDown, Info, ShieldCheck } from 'lucide-react';
 import { getAccounts, saveVoucher, getNextVoucherNumber } from '../lib/store';
 import { AccountHead, Voucher, VoucherType, VoucherEntry as IVoucherEntry } from '../types';
 import { toast } from 'sonner';
@@ -36,6 +36,10 @@ export default function VoucherEntry() {
   const [description, setDescription] = useState('');
   const [partyId, setPartyId] = useState('');
   const [amount, setAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Bank' | 'App'>('Cash');
+  const [bankAccountId, setBankAccountId] = useState('');
+  const [referenceNumber, setReferenceNumber] = useState('');
+  const [attachment, setAttachment] = useState<string | null>(null);
   
   // JV specific state
   const [jvEntries, setJvEntries] = useState<IVoucherEntry[]>([
@@ -155,6 +159,10 @@ export default function VoucherEntry() {
     setDescription('');
     setPartyId('');
     setAmount('');
+    setPaymentMethod('Cash');
+    setBankAccountId('');
+    setReferenceNumber('');
+    setAttachment(null);
     setJvEntries([
       { accountId: '', debit: 0, credit: 0 },
       { accountId: '', debit: 0, credit: 0 },
@@ -186,15 +194,22 @@ export default function VoucherEntry() {
         return;
       }
 
+      if (paymentMethod !== 'Cash' && !bankAccountId) {
+        toast.error('Please select a bank/app account');
+        return;
+      }
+
+      const settlementAccountId = paymentMethod === 'Cash' ? 'cash-001' : bankAccountId;
+
       if (activeTab === 'CRV') {
         entries = [
-          { accountId: 'cash-001', debit: val, credit: 0 },
+          { accountId: settlementAccountId, debit: val, credit: 0 },
           { accountId: partyId, debit: 0, credit: val },
         ];
       } else {
         entries = [
           { accountId: partyId, debit: val, credit: 0 },
-          { accountId: 'cash-001', debit: 0, credit: val },
+          { accountId: settlementAccountId, debit: 0, credit: val },
         ];
       }
     } else if (activeTab === 'JV') {
@@ -237,6 +252,10 @@ export default function VoucherEntry() {
       description,
       entries,
       voucherNumber: getNextVoucherNumber(activeTab),
+      attachment: attachment || undefined,
+      bankAccountId: paymentMethod !== 'Cash' ? bankAccountId : undefined,
+      referenceNumber: referenceNumber || undefined,
+      paymentMethod,
     };
 
     saveVoucher(newVoucher);
@@ -253,6 +272,22 @@ export default function VoucherEntry() {
     const newEntries = [...jvEntries];
     newEntries.splice(index, 1);
     setJvEntries(newEntries);
+  };
+
+  const handleFileChange = (e: import('react').ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        toast.error("File size too large. Max 2MB.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setAttachment(reader.result as string);
+        toast.success("Slip attached successfully");
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const updateJvEntry = (index: number, field: keyof IVoucherEntry, value: any) => {
@@ -376,7 +411,7 @@ export default function VoucherEntry() {
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold uppercase tracking-wider text-slate-500">From Party / Account</Label>
                     <AccountSearch 
-                      accounts={accounts.filter(a => !a.isSystem)} 
+                      accounts={accounts.filter(a => !a.isSystem && a.type !== 'Asset')} 
                       value={partyId} 
                       onValueChange={setPartyId} 
                     />
@@ -408,7 +443,7 @@ export default function VoucherEntry() {
                   <div className="space-y-2">
                     <Label className="text-xs font-semibold uppercase tracking-wider text-slate-500">To Party / Account</Label>
                     <AccountSearch 
-                      accounts={accounts.filter(a => !a.isSystem)} 
+                      accounts={accounts.filter(a => !a.isSystem && a.type !== 'Asset')} 
                       value={partyId} 
                       onValueChange={setPartyId} 
                     />
@@ -514,11 +549,94 @@ export default function VoucherEntry() {
             </Card>
           </TabsContent>
 
-          <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
-            <Button variant="outline" onClick={resetForm} className="w-full sm:w-auto brutal-btn">Clear Form</Button>
-            <Button onClick={handleSave} className="w-full sm:w-auto gap-2 brutal-btn-primary">
-              <Save className="w-4 h-4" /> Save Voucher
-            </Button>
+          <div className="mt-6 p-6 bg-slate-50/50 rounded-2xl border border-slate-100 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Received/Paid Via</Label>
+                <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as 'Cash' | 'Bank' | 'App')}>
+                  <SelectTrigger className="bg-white border-slate-200 rounded-lg h-10 font-medium">
+                    <SelectValue placeholder="Select method..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Cash">Cash</SelectItem>
+                    <SelectItem value="Bank">Bank</SelectItem>
+                    <SelectItem value="App">Mobile App (JazzCash/EasyPaisa)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {paymentMethod !== 'Cash' && (
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Select Bank / App</Label>
+                  <AccountSearch 
+                    accounts={accounts.filter(a => 
+                      (a.name.toLowerCase().includes('bank') || 
+                       a.name.toLowerCase().includes('pay') || 
+                       a.id.startsWith('wallet-')) &&
+                      !a.isSystem
+                    )} 
+                    value={bankAccountId} 
+                    onValueChange={setBankAccountId}
+                    placeholder="Search bank or app..."
+                    className="rounded-lg border-slate-200 h-10"
+                  />
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Reference # (Cheque/Txn ID)</Label>
+                <Input 
+                  placeholder="Ref-12345" 
+                  value={referenceNumber} 
+                  onChange={(e) => setReferenceNumber(e.target.value)}
+                  className="bg-white border-slate-200 rounded-lg h-10 font-medium"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-4 border-t border-slate-100">
+              <div className="w-full sm:w-auto">
+                <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 block mb-2">Transaction Slip / Attachment</Label>
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <input 
+                      type="file" 
+                      accept="image/*,.pdf" 
+                      onChange={handleFileChange}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                    />
+                    <Button variant="outline" size="sm" className="h-9 gap-2 border-slate-200 text-slate-600">
+                      <Upload className="w-4 h-4" /> {attachment ? 'Change Slip' : 'Upload Slip'}
+                    </Button>
+                  </div>
+                  {attachment && (
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-lg text-emerald-600 text-[10px] font-bold uppercase">
+                        <ShieldCheck className="w-3 h-3" /> Slip Attached
+                        <button onClick={() => setAttachment(null)} className="ml-1 hover:text-rose-600">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                      {attachment.startsWith('data:image') && (
+                        <div 
+                          className="w-10 h-10 rounded border border-slate-200 overflow-hidden shadow-sm cursor-pointer hover:opacity-80 transition-opacity"
+                          onClick={() => window.open('', '_blank')?.document.write(`<img src="${attachment}" style="max-width:100%">`)}
+                        >
+                          <img src={attachment} alt="Preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <div className="flex flex-col sm:flex-row justify-end gap-3 w-full sm:w-auto">
+                <Button variant="outline" onClick={resetForm} className="w-full sm:w-auto brutal-btn">Clear Form</Button>
+                <Button onClick={handleSave} className="w-full sm:w-auto gap-2 brutal-btn-primary">
+                  <Save className="w-4 h-4" /> Save Voucher
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       </Tabs>

@@ -9,7 +9,7 @@ import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
-import { FileText, Download, Filter, Calendar } from 'lucide-react';
+import { FileText, Download, Filter, Calendar, Paperclip, ExternalLink, Eye, X } from 'lucide-react';
 import { getAccounts, getLedger } from '../lib/store';
 import { AccountHead } from '../types';
 import { format, isWithinInterval, parseISO, startOfDay, endOfDay } from 'date-fns';
@@ -22,6 +22,7 @@ import { ScrollArea } from './ui/scroll-area';
 import { DatePicker } from './ui/date-picker';
 import { Label } from './ui/label';
 import { CountUp } from './ui/count-up';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 
 export default function LedgerReport() {
   const [accounts, setAccounts] = useState<AccountHead[]>([]);
@@ -29,6 +30,7 @@ export default function LedgerReport() {
   const [ledgerEntries, setLedgerEntries] = useState<any[]>([]);
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   useEffect(() => {
     setAccounts(getAccounts());
@@ -214,6 +216,7 @@ export default function LedgerReport() {
                           <TableHead className="w-[120px] text-[11px] font-bold uppercase tracking-wider text-slate-500">Date</TableHead>
                           <TableHead className="w-[150px] text-[11px] font-bold uppercase tracking-wider text-slate-500">Voucher #</TableHead>
                           <TableHead className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Description</TableHead>
+                          <TableHead className="w-[80px] text-[11px] font-bold uppercase tracking-wider text-slate-500">Slip</TableHead>
                           <TableHead className="text-[11px] font-bold uppercase tracking-wider text-slate-500 text-right">Debit</TableHead>
                           <TableHead className="text-[11px] font-bold uppercase tracking-wider text-slate-500 text-right">Credit</TableHead>
                           <TableHead className="text-[11px] font-bold uppercase tracking-wider text-slate-500 text-right">Balance</TableHead>
@@ -234,7 +237,36 @@ export default function LedgerReport() {
                                 <span className="font-bold text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded">{entry.voucherNumber}</span>
                               </TableCell>
                               <TableCell className="text-xs font-medium text-slate-700">
-                                {entry.description}
+                                <div className="flex flex-col gap-1">
+                                  <span>{entry.description}</span>
+                                  {(entry.referenceNumber || entry.paymentMethod) && (
+                                    <div className="flex items-center gap-2">
+                                      {entry.paymentMethod && (
+                                        <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded">
+                                          {entry.paymentMethod}
+                                        </span>
+                                      )}
+                                      {entry.referenceNumber && (
+                                        <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 bg-blue-50 text-blue-500 rounded flex items-center gap-1">
+                                          <Paperclip className="w-2 h-2" /> {entry.referenceNumber}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                {entry.attachment ? (
+                                  <button 
+                                    onClick={() => setPreviewImage(entry.attachment)}
+                                    className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+                                    title="View Slip"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </button>
+                                ) : (
+                                  <span className="text-slate-300">-</span>
+                                )}
                               </TableCell>
                               <TableCell className="text-right text-xs font-medium text-slate-600">{entry.debit > 0 ? formatCurrency(entry.debit) : '-'}</TableCell>
                               <TableCell className="text-right text-xs font-medium text-slate-600">{entry.credit > 0 ? formatCurrency(entry.credit) : '-'}</TableCell>
@@ -266,6 +298,32 @@ export default function LedgerReport() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
+        <DialogContent className="max-w-3xl bg-white p-0 overflow-hidden border-none glass-card">
+          <DialogHeader className="p-4 border-b border-slate-100 flex flex-row items-center justify-between">
+            <DialogTitle className="text-sm font-bold uppercase tracking-wider text-slate-700">Transaction Slip Preview</DialogTitle>
+          </DialogHeader>
+          <div className="p-6 flex items-center justify-center bg-slate-50 min-h-[400px]">
+            {previewImage?.startsWith('data:image') ? (
+              <img 
+                src={previewImage} 
+                alt="Transaction Slip" 
+                className="max-w-full max-h-[70vh] rounded-lg shadow-2xl border-4 border-white"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="flex flex-col items-center gap-4 text-slate-400">
+                <FileText className="w-16 h-16 opacity-20" />
+                <p className="text-xs font-bold uppercase tracking-widest">Document Preview Not Available</p>
+                <Button variant="outline" size="sm" asChild>
+                  <a href={previewImage || ''} target="_blank" rel="noopener noreferrer">Open in New Tab</a>
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -11,6 +11,7 @@ export interface AccountHead {
   type: AccountType;
   isSystem?: boolean; // e.g., Cash Account
   metadata?: Record<string, string>;
+  logo?: string; // Emoji or URL
 }
 
 export type VoucherType = 'CRV' | 'CPV' | 'JV';
@@ -28,6 +29,10 @@ export interface Voucher {
   description: string;
   entries: VoucherEntry[];
   voucherNumber: string;
+  attachment?: string; // Base64 or URL
+  bankAccountId?: string;
+  referenceNumber?: string;
+  paymentMethod?: 'Cash' | 'Bank' | 'App';
 }
 
 export interface DashboardStats {

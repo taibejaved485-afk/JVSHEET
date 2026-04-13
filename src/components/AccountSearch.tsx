@@ -63,7 +63,11 @@ export function AccountSearch({
             className={cn("w-full justify-between bg-white border-2 border-black h-10 font-black uppercase text-xs tracking-widest rounded-none", className)}
           >
             <div className="flex items-center gap-2 overflow-hidden">
-              <Search className="h-3 w-3 shrink-0 opacity-50" />
+              {selectedAccount?.logo ? (
+                <span className="text-lg shrink-0">{selectedAccount.logo}</span>
+              ) : (
+                <Search className="h-3 w-3 shrink-0 opacity-50" />
+              )}
               <span className="truncate">
                 {selectedAccount ? selectedAccount.name : placeholder}
               </span>
@@ -94,12 +98,19 @@ export function AccountSearch({
                           setOpen(false)
                         }}
                       >
-                        <div className="flex flex-1 items-center justify-between gap-4">
-                          <div className="flex flex-col">
-                            <span className="font-black uppercase text-xs">{account.name}</span>
-                            <span className="text-[10px] font-black text-black/60 uppercase tracking-widest">{account.type}</span>
-                          </div>
-                          <div className="text-right">
+                          <div className="flex flex-1 items-center justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                              {account.logo && (
+                                <span className="text-xl w-8 h-8 flex items-center justify-center bg-slate-50 rounded-lg shrink-0">
+                                  {account.logo}
+                                </span>
+                              )}
+                              <div className="flex flex-col">
+                                <span className="font-black uppercase text-xs">{account.name}</span>
+                                <span className="text-[10px] font-black text-black/60 uppercase tracking-widest">{account.type}</span>
+                              </div>
+                            </div>
+                            <div className="text-right">
                             <span className="text-[10px] font-black block uppercase tracking-tighter">Balance</span>
                             <span className={cn(
                               "text-xs font-bold tabular-nums",
