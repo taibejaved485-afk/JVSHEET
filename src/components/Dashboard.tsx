@@ -23,6 +23,14 @@ export default function Dashboard() {
   const [accounts, setAccounts] = useState<AccountHead[]>([]);
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [chartData, setChartData] = useState<{ name: string; value: number }[]>([]);
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(new Date());
+    }, 60000); // Update every minute
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const allAccounts = getAccounts();
@@ -85,8 +93,10 @@ export default function Dashboard() {
             <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">System Live</span>
           </div>
           <div className="text-right">
-            <p className="text-[10px] font-bold uppercase text-slate-400">Current Date</p>
-            <p className="text-sm font-semibold text-slate-900 tracking-wide">{format(new Date(), 'dd MMMM yyyy')}</p>
+            <p className="text-[10px] font-bold uppercase text-slate-400">Current Status</p>
+            <p className="text-sm font-semibold text-slate-900 tracking-wide">
+              <span className="text-blue-600">{format(now, 'EEEE')}</span>, {format(now, 'dd MMMM yyyy')}
+            </p>
           </div>
         </div>
       </div>
