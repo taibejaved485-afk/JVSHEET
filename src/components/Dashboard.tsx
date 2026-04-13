@@ -5,13 +5,15 @@
 
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Wallet, ArrowUpRight, ArrowDownLeft, TrendingUp, Receipt, Activity, BarChart3 } from 'lucide-react';
+import { Wallet, ArrowUpRight, ArrowDownLeft, TrendingUp, Receipt, Activity, BarChart3, Eye, FileText, ShieldCheck } from 'lucide-react';
 import { getAccountBalance, getAccounts, getVouchers } from '../lib/store';
 import { AccountHead, Voucher } from '../types';
 import { format } from 'date-fns';
 import { cn, formatCurrency } from '../lib/utils';
 import FinancialCharts from './FinancialCharts';
 import { CountUp } from './ui/count-up';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { Button } from './ui/button';
 
 export default function Dashboard() {
   const [stats, setStats] = useState({
@@ -24,6 +26,7 @@ export default function Dashboard() {
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [chartData, setChartData] = useState<{ name: string; value: number }[]>([]);
   const [now, setNow] = useState(new Date());
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -38,13 +41,21 @@ export default function Dashboard() {
     setAccounts(allAccounts);
     setVouchers(allVouchers);
     
-    // Cash in hand
+    // Cash in hand (Combined Cash + Bank)
     const cashBalance = getAccountBalance('cash-001');
+    let bankBalance = 0;
+    allAccounts.forEach(acc => {
+      const isBankOrApp = (acc.name.toLowerCase().includes('bank') || acc.name.toLowerCase().includes('pay') || acc.id.startsWith('wallet-')) && !acc.isSystem;
+      if (acc.type === 'Asset' && isBankOrApp) {
+        bankBalance += getAccountBalance(acc.id);
+      }
+    });
     
-    // Receivables (Assets other than cash)
+    // Receivables (Assets other than cash and bank)
     let receivables = 0;
     allAccounts.forEach(acc => {
-      if (acc.type === 'Asset' && acc.id !== 'cash-001') {
+      const isBankOrApp = (acc.name.toLowerCase().includes('bank') || acc.name.toLowerCase().includes('pay') || acc.id.startsWith('wallet-')) && !acc.isSystem;
+      if (acc.type === 'Asset' && acc.id !== 'cash-001' && !isBankOrApp) {
         const bal = getAccountBalance(acc.id);
         if (bal > 0) receivables += bal;
       }
@@ -59,7 +70,7 @@ export default function Dashboard() {
       }
     });
 
-    setStats({ cash: cashBalance, receivables, payables });
+    setStats({ cash: cashBalance + bankBalance, receivables, payables });
     setRecentVouchers(allVouchers.slice(-5).reverse());
 
     // Prepare chart data
@@ -104,7 +115,7 @@ export default function Dashboard() {
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         <Card className="glass-card group">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-500">Cash in Hand</CardTitle>
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-500">Cash Liquidity (Cash + Bank)</CardTitle>
             <div className="p-2 rounded-lg bg-blue-50 text-blue-600">
               <Wallet className="w-4 h-4" />
             </div>
@@ -182,19 +193,36 @@ export default function Dashboard() {
                 </div>
               ) : (
                 recentVouchers.map((v) => (
-                  <div key={v.id} className="flex items-center justify-between p-4 hover:bg-slate-50 transition-all cursor-pointer group">
+                  <div 
+                    key={v.id} 
+                    className="flex items-center justify-between p-4 hover:bg-slate-50 transition-all cursor-pointer group"
+                    onClick={() => v.attachment && setPreviewImage(v.attachment)}
+                  >
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-600">
                         {v.type}
                       </div>
                       <div className="space-y-0.5">
-                        <p className="text-sm font-bold text-slate-900 tracking-tight">{v.voucherNumber}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-bold text-slate-900 tracking-tight">{v.voucherNumber}</p>
+                          {v.paymentMethod && (
+                            <span className={cn(
+                              "text-[8px] font-black uppercase px-1.5 py-0.5 rounded tracking-tighter",
+                              v.paymentMethod === 'Cash' ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-blue-600"
+                            )}>
+                              {v.paymentMethod}
+                            </span>
+                          )}
+                          {v.attachment && <Eye className="w-3 h-3 text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />}
+                        </div>
                         <p className="text-xs text-slate-500 line-clamp-1">{v.description}</p>
                       </div>
                     </div>
                     <div className="text-right">
                       <p className="text-xs font-bold text-slate-900 mono-value">{format(new Date(v.date), 'MMM dd')}</p>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Verified</p>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 flex items-center justify-end gap-1">
+                        <ShieldCheck className="w-2.5 h-2.5" /> Verified
+                      </p>
                     </div>
                   </div>
                 ))
@@ -220,6 +248,32 @@ export default function Dashboard() {
           <p className="text-sm text-slate-500 mt-2">Authorize outgoing financial obligations for settlement.</p>
         </button>
       </div>
+
+      <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
+        <DialogContent className="max-w-3xl bg-white p-0 overflow-hidden border-none glass-card">
+          <DialogHeader className="p-4 border-b border-slate-100 flex flex-row items-center justify-between">
+            <DialogTitle className="text-sm font-bold uppercase tracking-wider text-slate-700">Transaction Slip Preview</DialogTitle>
+          </DialogHeader>
+          <div className="p-6 flex items-center justify-center bg-slate-50 min-h-[400px]">
+            {previewImage?.startsWith('data:image') ? (
+              <img 
+                src={previewImage} 
+                alt="Transaction Slip" 
+                className="max-w-full max-h-[70vh] rounded-lg shadow-2xl border-4 border-white"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="flex flex-col items-center gap-4 text-slate-400">
+                <FileText className="w-16 h-16 opacity-20" />
+                <p className="text-xs font-bold uppercase tracking-widest">Document Preview Not Available</p>
+                <Button variant="outline" size="sm" asChild>
+                  <a href={previewImage || ''} target="_blank" rel="noopener noreferrer">Open in New Tab</a>
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
