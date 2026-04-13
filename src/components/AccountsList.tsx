@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
@@ -195,6 +195,25 @@ export default function AccountsList() {
       if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
       return 0;
     });
+
+  const getAccountCategory = (acc: AccountHead) => {
+    const name = acc.name.toLowerCase();
+    const isBankOrApp = name.includes('bank') || name.includes('pay') || acc.id.startsWith('wallet-');
+    
+    if (acc.id === 'cash-001' || isBankOrApp) return 'Cash & Banks';
+    if (acc.type === 'Asset') return 'Parties (Receivables)';
+    if (acc.type === 'Liability') return 'Liabilities (Payables)';
+    return acc.type;
+  };
+
+  const groupedAccounts = filteredAccounts.reduce((groups: Record<string, AccountHead[]>, acc) => {
+    const category = getAccountCategory(acc);
+    if (!groups[category]) groups[category] = [];
+    groups[category].push(acc);
+    return groups;
+  }, {});
+
+  const categories = ['Cash & Banks', 'Parties (Receivables)', 'Liabilities (Payables)', 'Equity', 'Revenue', 'Expense'];
 
   return (
     <div className="space-y-8 pb-12">
@@ -407,90 +426,106 @@ export default function AccountsList() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredAccounts.map((acc) => {
-                      const balance = getAccountBalance(acc.id);
-                      const isSelected = selectedIds.includes(acc.id);
+                    {categories.map(category => {
+                      const categoryAccounts = groupedAccounts[category];
+                      if (!categoryAccounts || categoryAccounts.length === 0) return null;
+
                       return (
-                        <TableRow 
-                          key={acc.id} 
-                          className={cn(
-                            "hover:bg-slate-50 transition-colors group border-b border-slate-100",
-                            isSelected && "bg-blue-50/50"
-                          )}
-                        >
-                          <TableCell>
-                            {!acc.isSystem && (
-                              <Checkbox 
-                                checked={isSelected}
-                                onCheckedChange={() => toggleSelection(acc.id)}
-                                aria-label={`Select ${acc.name}`}
-                                className="rounded-md border-slate-300"
-                              />
-                            )}
-                          </TableCell>
-                          <TableCell className="font-semibold text-slate-900">
-                            <div className={cn(
-                              "flex items-center gap-2",
-                              balance === 0 && "text-slate-500 font-medium"
-                            )}>
-                              {acc.isSystem && <ShieldCheck className={cn("w-4 h-4", balance === 0 ? "text-slate-400" : "text-blue-600")} />}
-                              {acc.name}
-                              {balance === 0 && (
-                                <span className="text-[9px] font-black uppercase tracking-tighter px-1.5 py-0.5 bg-slate-100 text-slate-400 rounded border border-slate-200">
-                                  No Active Balance
-                                </span>
-                              )}
-                            </div>
-                            {acc.metadata && Object.keys(acc.metadata).length > 0 && (
-                              <div className={cn("flex flex-wrap gap-1 mt-1.5", balance === 0 && "opacity-60")}>
-                                {Object.entries(acc.metadata).map(([key, value]) => (
-                                  <span key={key} className="text-[10px] font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
-                                    {key}: {value}
+                        <React.Fragment key={category}>
+                          <TableRow className="bg-slate-50/30 hover:bg-slate-50/30 border-y border-slate-100">
+                            <TableCell colSpan={5} className="py-2 px-6">
+                              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">
+                                {category}
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                          {categoryAccounts.map((acc) => {
+                            const balance = getAccountBalance(acc.id);
+                            const isSelected = selectedIds.includes(acc.id);
+                            return (
+                              <TableRow 
+                                key={acc.id} 
+                                className={cn(
+                                  "hover:bg-slate-50 transition-colors group border-b border-slate-100",
+                                  isSelected && "bg-blue-50/50"
+                                )}
+                              >
+                                <TableCell>
+                                  {!acc.isSystem && (
+                                    <Checkbox 
+                                      checked={isSelected}
+                                      onCheckedChange={() => toggleSelection(acc.id)}
+                                      aria-label={`Select ${acc.name}`}
+                                      className="rounded-md border-slate-300"
+                                    />
+                                  )}
+                                </TableCell>
+                                <TableCell className="font-semibold text-slate-900">
+                                  <div className={cn(
+                                    "flex items-center gap-2",
+                                    balance === 0 && "text-slate-500 font-medium"
+                                  )}>
+                                    {acc.isSystem && <ShieldCheck className={cn("w-4 h-4", balance === 0 ? "text-slate-400" : "text-blue-600")} />}
+                                    {acc.name}
+                                    {balance === 0 && (
+                                      <span className="text-[9px] font-black uppercase tracking-tighter px-1.5 py-0.5 bg-slate-100 text-slate-400 rounded border border-slate-200">
+                                        No Active Balance
+                                      </span>
+                                    )}
+                                  </div>
+                                  {acc.metadata && Object.keys(acc.metadata).length > 0 && (
+                                    <div className={cn("flex flex-wrap gap-1 mt-1.5", balance === 0 && "opacity-60")}>
+                                      {Object.entries(acc.metadata).map(([key, value]) => (
+                                        <span key={key} className="text-[10px] font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
+                                          {key}: {value}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  <span className={cn(
+                                    "text-[10px] font-bold uppercase px-2 py-1 rounded-md",
+                                    balance === 0 ? "bg-slate-50 text-slate-400 border border-slate-100" : "bg-slate-100 text-slate-600"
+                                  )}>
+                                    {acc.type}
                                   </span>
-                                ))}
-                              </div>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <span className={cn(
-                              "text-[10px] font-bold uppercase px-2 py-1 rounded-md",
-                              balance === 0 ? "bg-slate-50 text-slate-400 border border-slate-100" : "bg-slate-100 text-slate-600"
-                            )}>
-                              {acc.type}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right font-medium text-slate-900">
-                            <span className={cn(
-                              "tabular-nums mono-value",
-                              balance === 0 && "text-slate-400 font-normal"
-                            )}>
-                              Rs. <CountUp value={Math.abs(balance)} formatter={(v) => new Intl.NumberFormat('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)} />
-                            </span>
-                            <span className={cn(
-                              "text-[10px] ml-1.5 font-bold px-1.5 py-0.5 rounded",
-                              balance > 0 ? "bg-emerald-50 text-emerald-600" : 
-                              balance < 0 ? "bg-rose-50 text-rose-600" : 
-                              "bg-slate-100 text-slate-400"
-                            )}>
-                              {balance > 0 ? 'DR' : balance < 0 ? 'CR' : 'NIL'}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center justify-end gap-2">
-                              <Button variant="ghost" size="sm" className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg h-8">View Ledger</Button>
-                              {!acc.isSystem && (
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  onClick={() => setDeletingAccountId(acc.id)}
-                                  className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg h-8 w-8 p-0"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
+                                </TableCell>
+                                <TableCell className="text-right font-medium text-slate-900">
+                                  <span className={cn(
+                                    "tabular-nums mono-value",
+                                    balance === 0 && "text-slate-400 font-normal"
+                                  )}>
+                                    Rs. <CountUp value={Math.abs(balance)} formatter={(v) => new Intl.NumberFormat('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)} />
+                                  </span>
+                                  <span className={cn(
+                                    "text-[10px] ml-1.5 font-bold px-1.5 py-0.5 rounded",
+                                    balance > 0 ? "bg-emerald-50 text-emerald-600" : 
+                                    balance < 0 ? "bg-rose-50 text-rose-600" : 
+                                    "bg-slate-100 text-slate-400"
+                                  )}>
+                                    {balance > 0 ? 'DR' : balance < 0 ? 'CR' : 'NIL'}
+                                  </span>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center justify-end gap-2">
+                                    <Button variant="ghost" size="sm" className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg h-8">View Ledger</Button>
+                                    {!acc.isSystem && (
+                                      <Button 
+                                        variant="ghost" 
+                                        size="sm" 
+                                        onClick={() => setDeletingAccountId(acc.id)}
+                                        className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg h-8 w-8 p-0"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </React.Fragment>
                       );
                     })}
                   </TableBody>

@@ -14,7 +14,8 @@ import FinancialCharts from './FinancialCharts';
 import { CountUp } from './ui/count-up';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
+import { Tooltip } from 'react-tooltip';
 
 export default function Dashboard() {
   const [stats, setStats] = useState({
@@ -134,7 +135,13 @@ export default function Dashboard() {
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         <Card className="glass-card group">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-500">Cash Liquidity (Cash + Bank)</CardTitle>
+            <CardTitle 
+              className="text-xs font-bold uppercase tracking-wider text-slate-500 cursor-help"
+              data-tooltip-id="liquidity-tooltip"
+              data-tooltip-content="Cash aur Bank accounts ka total balance (Combined Balance)."
+            >
+              Cash Liquidity (Cash + Bank)
+            </CardTitle>
             <div className="p-2 rounded-lg bg-blue-50 text-blue-600">
               <Wallet className="w-4 h-4" />
             </div>
@@ -143,7 +150,11 @@ export default function Dashboard() {
             <div className="text-3xl font-bold tracking-tight text-slate-900 mono-value">
               Rs. <CountUp value={stats.cash} formatter={(v) => new Intl.NumberFormat('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)} />
             </div>
-            <div className="flex items-center gap-1 mt-2 text-[11px] text-emerald-600 font-bold uppercase">
+            <div 
+              className="flex items-center gap-1 mt-2 text-[11px] text-emerald-600 font-bold uppercase cursor-help"
+              data-tooltip-id="telemetry-tooltip"
+              data-tooltip-content="System real-time data update kar raha hai."
+            >
               <Activity className="w-3 h-3" />
               <span>Telemetry: Active</span>
             </div>
@@ -345,6 +356,9 @@ export default function Dashboard() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <Tooltip id="liquidity-tooltip" className="z-[100] !bg-slate-900 !text-white !rounded-lg !text-[10px] !font-bold !uppercase !tracking-widest !px-3 !py-2" />
+      <Tooltip id="telemetry-tooltip" className="z-[100] !bg-slate-900 !text-white !rounded-lg !text-[10px] !font-bold !uppercase !tracking-widest !px-3 !py-2" />
     </div>
   );
 }

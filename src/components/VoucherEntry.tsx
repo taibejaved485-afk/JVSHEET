@@ -18,6 +18,7 @@ import { DatePicker } from './ui/date-picker';
 import { AccountSearch } from './AccountSearch';
 import { cn, formatCurrency } from '../lib/utils';
 import Papa from 'papaparse';
+import { Tooltip } from 'react-tooltip';
 import {
   Dialog,
   DialogContent,
@@ -421,6 +422,12 @@ export default function VoucherEntry() {
   const totalCredit = jvEntries.reduce((sum, e) => sum + e.credit, 0);
   const isBalanced = totalDebit === totalCredit && totalDebit > 0;
 
+  const isFormValid = () => {
+    if (!description.trim() || !date) return false;
+    if (activeTab === 'JV') return isBalanced;
+    return !!partyId && !!amount && (paymentMethod === 'Cash' || !!bankAccountId) && !!signatureData;
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-12">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-6">
@@ -492,7 +499,9 @@ export default function VoucherEntry() {
         <TabsList className="w-full justify-start h-auto p-1 bg-slate-100 rounded-xl mb-8 gap-1">
           <TabsTrigger 
             value="CRV" 
-            className="px-6 py-2.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm font-semibold uppercase text-xs tracking-wider transition-all"
+            className="px-6 py-2.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm font-semibold uppercase text-xs tracking-wider transition-all cursor-help"
+            data-tooltip-id="crv-tooltip"
+            data-tooltip-content="Cash Receipt Voucher: Jab paise milte hain."
           >
             Cash Receipt
           </TabsTrigger>
@@ -504,7 +513,9 @@ export default function VoucherEntry() {
           </TabsTrigger>
           <TabsTrigger 
             value="JV" 
-            className="px-6 py-2.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm font-semibold uppercase text-xs tracking-wider transition-all"
+            className="px-6 py-2.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm font-semibold uppercase text-xs tracking-wider transition-all cursor-help"
+            data-tooltip-id="jv-tooltip"
+            data-tooltip-content="Journal Voucher: Non-cash transactions ke liye."
           >
             General Voucher
           </TabsTrigger>
@@ -840,10 +851,11 @@ export default function VoucherEntry() {
                 <Button variant="outline" onClick={resetForm} className="w-full sm:w-auto brutal-btn">Clear Form</Button>
                 <Button 
                   onClick={handleSave} 
-                  disabled={!signatureData}
                   className={cn(
-                    "w-full sm:w-auto gap-2 brutal-btn-primary transition-all",
-                    !signatureData && "opacity-50 cursor-not-allowed grayscale"
+                    "w-full sm:w-auto gap-2 brutal-btn-primary transition-all duration-500",
+                    isFormValid() 
+                      ? "animate-pulse shadow-[0_0_15px_rgba(37,99,235,0.5)]" 
+                      : "opacity-50 cursor-not-allowed grayscale"
                   )}
                 >
                   <Save className="w-4 h-4" /> Save Voucher
@@ -852,6 +864,9 @@ export default function VoucherEntry() {
           </div>
         </div>
       </Tabs>
+
+      <Tooltip id="crv-tooltip" className="z-[100] !bg-slate-900 !text-white !rounded-lg !text-[10px] !font-bold !uppercase !tracking-widest !px-3 !py-2" />
+      <Tooltip id="jv-tooltip" className="z-[100] !bg-slate-900 !text-white !rounded-lg !text-[10px] !font-bold !uppercase !tracking-widest !px-3 !py-2" />
     </div>
   );
 }

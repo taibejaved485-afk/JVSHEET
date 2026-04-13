@@ -146,9 +146,9 @@ export default function LedgerReport() {
       </div>
 
       <Card className="glass-card bg-white">
-        <CardHeader className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 border-b border-slate-100 p-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 w-full">
-            <div className="space-y-2">
+        <CardHeader className="border-b border-slate-100 p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-y-6 gap-x-4 w-full">
+            <div className="space-y-2 xl:col-span-2">
               <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">Account Head</Label>
               <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
                 <SelectTrigger className="bg-white border border-slate-200 rounded-lg h-10 font-medium text-sm">
@@ -164,7 +164,7 @@ export default function LedgerReport() {
               </Select>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 xl:col-span-2">
               <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">Search</Label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -177,16 +177,20 @@ export default function LedgerReport() {
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 xl:col-span-4">
               <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">Date Range</Label>
               <div className="flex items-center gap-2">
-                <DatePicker date={startDate} setDate={setStartDate} />
-                <span className="text-slate-300">/</span>
-                <DatePicker date={endDate} setDate={setEndDate} />
+                <div className="flex-1 min-w-0">
+                  <DatePicker date={startDate} setDate={setStartDate} className="w-full" />
+                </div>
+                <span className="text-slate-300 shrink-0">/</span>
+                <div className="flex-1 min-w-0">
+                  <DatePicker date={endDate} setDate={setEndDate} className="w-full" />
+                </div>
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 xl:col-span-2">
               <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">Amount (Min-Max)</Label>
               <div className="flex items-center gap-2">
                 <Input 
@@ -194,19 +198,20 @@ export default function LedgerReport() {
                   placeholder="Min" 
                   value={minAmount}
                   onChange={(e) => setMinAmount(e.target.value)}
-                  className="bg-white border-slate-200 rounded-lg h-10 text-xs"
+                  className="bg-white border-slate-200 rounded-lg h-10 text-xs w-full"
                 />
+                <span className="text-slate-300 shrink-0">-</span>
                 <Input 
                   type="number" 
                   placeholder="Max" 
                   value={maxAmount}
                   onChange={(e) => setMaxAmount(e.target.value)}
-                  className="bg-white border-slate-200 rounded-lg h-10 text-xs"
+                  className="bg-white border-slate-200 rounded-lg h-10 text-xs w-full"
                 />
               </div>
             </div>
 
-            <div className="flex items-end gap-2">
+            <div className="flex items-end gap-2 xl:col-span-2">
               <Button 
                 variant="outline" 
                 onClick={() => {
@@ -217,7 +222,7 @@ export default function LedgerReport() {
                   setMinAmount('');
                   setMaxAmount('');
                 }}
-                className="h-10 px-3 border-slate-200 text-slate-500 hover:text-slate-900 rounded-lg text-xs font-bold uppercase"
+                className="h-10 px-3 border-slate-200 text-slate-500 hover:text-slate-900 rounded-lg text-xs font-bold uppercase shrink-0"
               >
                 <X className="w-4 h-4" />
               </Button>
