@@ -5,15 +5,16 @@
 
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Wallet, ArrowUpRight, ArrowDownLeft, TrendingUp, Receipt, Activity, BarChart3, Eye, FileText, ShieldCheck } from 'lucide-react';
-import { getAccountBalance, getAccounts, getVouchers } from '../lib/store';
-import { AccountHead, Voucher } from '../types';
+import { Wallet, ArrowUpRight, ArrowDownLeft, TrendingUp, Receipt, Activity, BarChart3, Eye, FileText, ShieldCheck, Package, AlertTriangle, Globe } from 'lucide-react';
+import { getAccountBalance, getAccounts, getVouchers, getInventory } from '../lib/store';
+import { AccountHead, Voucher, InventoryItem } from '../types';
 import { format } from 'date-fns';
 import { cn, formatCurrency } from '../lib/utils';
 import FinancialCharts from './FinancialCharts';
 import { CountUp } from './ui/count-up';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 
 export default function Dashboard() {
   const [stats, setStats] = useState({
@@ -27,6 +28,8 @@ export default function Dashboard() {
   const [chartData, setChartData] = useState<{ name: string; value: number }[]>([]);
   const [now, setNow] = useState(new Date());
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [currencyData, setCurrencyData] = useState<{ name: string; value: number }[]>([]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -89,7 +92,23 @@ export default function Dashboard() {
       return { name: format(new Date(date), 'EEE'), value: total };
     });
     setChartData(dailyData);
+
+    const allInventory = getInventory();
+    setInventory(allInventory);
+
+    // Currency distribution
+    const distribution = allVouchers.reduce((acc: any, v) => {
+      const curr = v.currency || 'PKR';
+      const amount = v.entries.reduce((sum, e) => sum + Math.max(e.debit, e.credit), 0);
+      acc[curr] = (acc[curr] || 0) + amount;
+      return acc;
+    }, {});
+
+    setCurrencyData(Object.entries(distribution).map(([name, value]) => ({ name, value: value as number })));
   }, []);
+
+  const lowStockItems = inventory.filter(i => i.quantity <= i.minStock);
+  const COLORS = ['#3b82f6', '#10b981', '#f59e0b'];
 
   return (
     <div className="space-y-8 pb-12">
@@ -162,6 +181,25 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      {lowStockItems.length > 0 && (
+        <Card className="border-rose-200 bg-rose-50/30 shadow-sm overflow-hidden">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-rose-600" />
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-rose-600">Critical Stock Alert</p>
+                <p className="text-sm font-medium text-slate-700">
+                  {lowStockItems.length} items are below minimum threshold: {lowStockItems.map(i => i.name).join(', ')}
+                </p>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" className="border-rose-200 text-rose-600 hover:bg-rose-100">Restock Now</Button>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="glass-card lg:col-span-2 overflow-hidden">
           <CardHeader className="border-b border-slate-100 bg-slate-50/50">
@@ -176,6 +214,39 @@ export default function Dashboard() {
         </Card>
 
         <Card className="glass-card overflow-hidden">
+          <CardHeader className="border-b border-slate-100 bg-slate-50/50">
+            <CardTitle className="text-xs font-bold uppercase tracking-widest flex items-center gap-2 text-slate-700">
+              <Globe className="w-4 h-4" />
+              Currency Distribution
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6 h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={currencyData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={80}
+                  paddingAngle={5}
+                  dataKey="value"
+                >
+                  {currencyData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#fff', borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  itemStyle={{ fontSize: '12px', fontWeight: 'bold' }}
+                />
+                <Legend verticalAlign="bottom" height={36}/>
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card overflow-hidden lg:col-span-3">
           <CardHeader className="border-b border-slate-100 bg-slate-50/50">
             <CardTitle className="text-xs font-bold uppercase tracking-widest flex items-center gap-2 text-slate-700">
               <Activity className="w-4 h-4" />

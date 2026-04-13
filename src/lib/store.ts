@@ -3,12 +3,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { AccountHead, Voucher, VoucherType } from '../types';
+import { AccountHead, Voucher, VoucherType, InventoryItem } from '../types';
 
 const STORAGE_KEYS = {
   ACCOUNTS: 'accounting_accounts',
   VOUCHERS: 'accounting_vouchers',
+  INVENTORY: 'accounting_inventory',
 };
+
+const DEFAULT_INVENTORY: InventoryItem[] = [
+  { id: 'item-001', name: 'Raw Material A', quantity: 500, unit: 'kg', minStock: 100 },
+  { id: 'item-002', name: 'Finished Product X', quantity: 50, unit: 'pcs', minStock: 20 },
+  { id: 'item-003', name: 'Packaging Box', quantity: 1000, unit: 'units', minStock: 200 },
+];
 
 const DEFAULT_ACCOUNTS: AccountHead[] = [
   { id: 'cash-001', name: 'Cash Account', type: 'Asset', isSystem: true, logo: '💵' },
@@ -168,4 +175,36 @@ export const getLedger = (accountId: string) => {
   });
 
   return ledgerEntries;
+};
+
+export const getInventory = (): InventoryItem[] => {
+  const stored = localStorage.getItem(STORAGE_KEYS.INVENTORY);
+  if (!stored) {
+    localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(DEFAULT_INVENTORY));
+    return DEFAULT_INVENTORY;
+  }
+  return JSON.parse(stored);
+};
+
+export const saveInventory = (inventory: InventoryItem[]) => {
+  localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(inventory));
+};
+
+export const updateInventoryFromVoucher = (voucher: Voucher) => {
+  if (!voucher.stockItems || voucher.stockItems.length === 0) return;
+
+  const inventory = getInventory();
+  voucher.stockItems.forEach(stockItem => {
+    const itemIndex = inventory.findIndex(i => i.id === stockItem.itemId);
+    if (itemIndex !== -1) {
+      // In CRV (Cash Received), we assume we sold something, so stock decreases
+      // In CPV (Cash Paid), we assume we bought something, so stock increases
+      if (voucher.type === 'CRV') {
+        inventory[itemIndex].quantity -= stockItem.quantity;
+      } else if (voucher.type === 'CPV') {
+        inventory[itemIndex].quantity += stockItem.quantity;
+      }
+    }
+  });
+  saveInventory(inventory);
 };

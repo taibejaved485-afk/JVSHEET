@@ -22,6 +22,11 @@ export interface VoucherEntry {
   credit: number;
 }
 
+export interface VoucherStockItem {
+  itemId: string;
+  quantity: number;
+}
+
 export interface Voucher {
   id: string;
   type: VoucherType;
@@ -33,6 +38,18 @@ export interface Voucher {
   bankAccountId?: string;
   referenceNumber?: string;
   paymentMethod?: 'Cash' | 'Bank' | 'App';
+  signatureData?: string; // Base64
+  currency: 'PKR' | 'USD' | 'AED';
+  exchangeRate: number;
+  stockItems?: VoucherStockItem[];
+}
+
+export interface InventoryItem {
+  id: string;
+  name: string;
+  quantity: number;
+  unit: string;
+  minStock: number;
 }
 
 export interface DashboardStats {

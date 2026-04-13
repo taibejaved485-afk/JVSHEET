@@ -3,20 +3,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Label } from './ui/label';
-import { Plus, Trash2, Save, AlertCircle, Calendar as CalendarIcon, Upload, FileDown, Info, ShieldCheck } from 'lucide-react';
-import { getAccounts, saveVoucher, getNextVoucherNumber } from '../lib/store';
-import { AccountHead, Voucher, VoucherType, VoucherEntry as IVoucherEntry } from '../types';
+import { Plus, Trash2, Save, AlertCircle, Calendar as CalendarIcon, Upload, FileDown, Info, ShieldCheck, Eraser, PenTool, Package, Globe } from 'lucide-react';
+import { getAccounts, saveVoucher, getNextVoucherNumber, getInventory, updateInventoryFromVoucher } from '../lib/store';
+import { AccountHead, Voucher, VoucherType, VoucherEntry as IVoucherEntry, InventoryItem, VoucherStockItem } from '../types';
 import { toast } from 'sonner';
 import { DatePicker } from './ui/date-picker';
 import { AccountSearch } from './AccountSearch';
-import { formatCurrency } from '../lib/utils';
+import { cn, formatCurrency } from '../lib/utils';
 import Papa from 'papaparse';
 import {
   Dialog,
@@ -27,8 +27,94 @@ import {
   DialogTrigger,
 } from "./ui/dialog";
 
+// Signature Pad Component
+function SignaturePad({ onSave, onClear }: { onSave: (data: string) => void, onClear: () => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+
+  const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.beginPath();
+    const rect = canvas.getBoundingClientRect();
+    const x = ('touches' in e) ? e.touches[0].clientX - rect.left : (e as React.MouseEvent).clientX - rect.left;
+    const y = ('touches' in e) ? e.touches[0].clientY - rect.top : (e as React.MouseEvent).clientY - rect.top;
+    ctx.moveTo(x, y);
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#0f172a';
+    setIsDrawing(true);
+  };
+
+  const draw = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!isDrawing) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = ('touches' in e) ? e.touches[0].clientX - rect.left : (e as React.MouseEvent).clientX - rect.left;
+    const y = ('touches' in e) ? e.touches[0].clientY - rect.top : (e as React.MouseEvent).clientY - rect.top;
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  };
+
+  const endDrawing = () => {
+    setIsDrawing(false);
+    const canvas = canvasRef.current;
+    if (canvas) {
+      onSave(canvas.toDataURL());
+    }
+  };
+
+  const clear = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    onClear();
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between mb-2">
+        <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Authorized Signature</Label>
+        <Button variant="ghost" size="sm" onClick={clear} className="h-6 px-2 text-[9px] uppercase font-bold text-rose-500 hover:text-rose-600 hover:bg-rose-50">
+          <Eraser className="w-3 h-3 mr-1" /> Clear
+        </Button>
+      </div>
+      <div className="relative group">
+        <canvas
+          ref={canvasRef}
+          width={400}
+          height={120}
+          onMouseDown={startDrawing}
+          onMouseMove={draw}
+          onMouseUp={endDrawing}
+          onMouseOut={endDrawing}
+          onTouchStart={startDrawing}
+          onTouchMove={draw}
+          onTouchEnd={endDrawing}
+          className="w-full h-[120px] bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl cursor-crosshair transition-all group-hover:border-blue-300"
+        />
+        {!isDrawing && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20 group-hover:opacity-10 transition-opacity">
+            <PenTool className="w-8 h-8 text-slate-400" />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function VoucherEntry() {
   const [accounts, setAccounts] = useState<AccountHead[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [activeTab, setActiveTab] = useState<VoucherType>('CRV');
   
   // Form States
@@ -41,6 +127,13 @@ export default function VoucherEntry() {
   const [referenceNumber, setReferenceNumber] = useState('');
   const [attachment, setAttachment] = useState<string | null>(null);
   
+  // Enterprise Features State
+  const [currency, setCurrency] = useState<'PKR' | 'USD' | 'AED'>('PKR');
+  const [exchangeRate, setExchangeRate] = useState('1');
+  const [selectedItemId, setSelectedItemId] = useState('');
+  const [itemQuantity, setItemQuantity] = useState('');
+  const [signatureData, setSignatureData] = useState<string | null>(null);
+  
   // JV specific state
   const [jvEntries, setJvEntries] = useState<IVoucherEntry[]>([
     { accountId: '', debit: 0, credit: 0 },
@@ -50,6 +143,7 @@ export default function VoucherEntry() {
 
   useEffect(() => {
     setAccounts(getAccounts());
+    setInventory(getInventory());
   }, []);
 
   const downloadTemplate = () => {
@@ -130,6 +224,8 @@ export default function VoucherEntry() {
               description,
               entries,
               voucherNumber: getNextVoucherNumber(type),
+              currency: 'PKR',
+              exchangeRate: 1,
             };
 
             saveVoucher(newVoucher);
@@ -163,6 +259,11 @@ export default function VoucherEntry() {
     setBankAccountId('');
     setReferenceNumber('');
     setAttachment(null);
+    setCurrency('PKR');
+    setExchangeRate('1');
+    setSelectedItemId('');
+    setItemQuantity('');
+    setSignatureData(null);
     setJvEntries([
       { accountId: '', debit: 0, credit: 0 },
       { accountId: '', debit: 0, credit: 0 },
@@ -245,21 +346,41 @@ export default function VoucherEntry() {
       entries = validEntries;
     }
 
+    if (!signatureData) {
+      toast.error('Authorized signature is required to save voucher');
+      return;
+    }
+
+    const rate = parseFloat(exchangeRate) || 1;
+
     const newVoucher: Voucher = {
       id: crypto.randomUUID(),
       type: activeTab,
       date,
       description,
-      entries,
+      entries: entries.map(e => ({ 
+        ...e, 
+        debit: e.debit * rate, 
+        credit: e.credit * rate 
+      })),
       voucherNumber: getNextVoucherNumber(activeTab),
       attachment: attachment || undefined,
       bankAccountId: paymentMethod !== 'Cash' ? bankAccountId : undefined,
       referenceNumber: referenceNumber || undefined,
       paymentMethod,
+      signatureData,
+      currency,
+      exchangeRate: rate,
+      stockItems: selectedItemId && itemQuantity ? [{ itemId: selectedItemId, quantity: parseFloat(itemQuantity) }] : undefined,
     };
 
     saveVoucher(newVoucher);
+    updateInventoryFromVoucher(newVoucher);
     toast.success(`${activeTab} saved successfully: ${newVoucher.voucherNumber}`);
+    toast.info('WhatsApp Alert Sent to Party & Owner', {
+      icon: '📱',
+      duration: 5000,
+    });
     resetForm();
   };
 
@@ -550,6 +671,86 @@ export default function VoucherEntry() {
           </TabsContent>
 
           <div className="mt-6 p-6 bg-slate-50/50 rounded-2xl border border-slate-100 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6 border-b border-slate-100">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Globe className="w-4 h-4 text-blue-500" />
+                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-700">Multi-Currency Settlement</Label>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-bold uppercase text-slate-400">Currency</Label>
+                    <Select value={currency} onValueChange={(v) => setCurrency(v as any)}>
+                      <SelectTrigger className="bg-white border-slate-200 rounded-lg h-10 font-medium">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="PKR">PKR (Base)</SelectItem>
+                        <SelectItem value="USD">USD (Dollar)</SelectItem>
+                        <SelectItem value="AED">AED (Dirham)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-bold uppercase text-slate-400">Exchange Rate</Label>
+                    <Input 
+                      type="number" 
+                      value={exchangeRate} 
+                      onChange={(e) => setExchangeRate(e.target.value)}
+                      disabled={currency === 'PKR'}
+                      className="bg-white border-slate-200 rounded-lg h-10 font-medium"
+                    />
+                  </div>
+                </div>
+                {currency !== 'PKR' && amount && (
+                  <div className="p-3 bg-blue-50/50 rounded-lg border border-blue-100">
+                    <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-1">Equivalent Value</p>
+                    <p className="text-lg font-bold text-slate-900 mono-value">
+                      {formatCurrency(parseFloat(amount) * (parseFloat(exchangeRate) || 0))}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Package className="w-4 h-4 text-emerald-500" />
+                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-700">Inventory Integration</Label>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-bold uppercase text-slate-400">Select Item</Label>
+                    <Select value={selectedItemId} onValueChange={setSelectedItemId}>
+                      <SelectTrigger className="bg-white border-slate-200 rounded-lg h-10 font-medium">
+                        <SelectValue placeholder="Select stock..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {inventory.map(item => (
+                          <SelectItem key={item.id} value={item.id}>{item.name} ({item.unit})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-bold uppercase text-slate-400">Quantity</Label>
+                    <Input 
+                      type="number" 
+                      placeholder="0.00"
+                      value={itemQuantity} 
+                      onChange={(e) => setItemQuantity(e.target.value)}
+                      className="bg-white border-slate-200 rounded-lg h-10 font-medium"
+                    />
+                  </div>
+                </div>
+                {selectedItemId && (
+                  <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase">
+                    <Info className="w-3 h-3" />
+                    Current Stock: {inventory.find(i => i.id === selectedItemId)?.quantity} {inventory.find(i => i.id === selectedItemId)?.unit}
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="space-y-2">
                 <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Received/Paid Via</Label>
@@ -594,49 +795,60 @@ export default function VoucherEntry() {
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-4 border-t border-slate-100">
-              <div className="w-full sm:w-auto">
-                <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 block mb-2">Transaction Slip / Attachment</Label>
-                <div className="flex items-center gap-3">
-                  <div className="relative">
-                    <input 
-                      type="file" 
-                      accept="image/*,.pdf" 
-                      onChange={handleFileChange}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                    />
-                    <Button variant="outline" size="sm" className="h-9 gap-2 border-slate-200 text-slate-600">
-                      <Upload className="w-4 h-4" /> {attachment ? 'Change Slip' : 'Upload Slip'}
-                    </Button>
-                  </div>
-                  {attachment && (
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-lg text-emerald-600 text-[10px] font-bold uppercase">
-                        <ShieldCheck className="w-3 h-3" /> Slip Attached
-                        <button onClick={() => setAttachment(null)} className="ml-1 hover:text-rose-600">
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
-                      {attachment.startsWith('data:image') && (
-                        <div 
-                          className="w-10 h-10 rounded border border-slate-200 overflow-hidden shadow-sm cursor-pointer hover:opacity-80 transition-opacity"
-                          onClick={() => window.open('', '_blank')?.document.write(`<img src="${attachment}" style="max-width:100%">`)}
-                        >
-                          <img src={attachment} alt="Preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                        </div>
-                      )}
+              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 pt-6 border-t border-slate-100">
+                <div className="w-full lg:w-1/2 space-y-4">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">Transaction Slip / Attachment</Label>
+                  <div className="flex items-center gap-4">
+                    <div className="relative">
+                      <input 
+                        type="file" 
+                        accept="image/*,.pdf" 
+                        onChange={handleFileChange}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                      />
+                      <Button variant="outline" size="sm" className="h-10 gap-2 border-slate-200 text-slate-600 bg-white">
+                        <Upload className="w-4 h-4" /> {attachment ? 'Change Slip' : 'Upload Slip'}
+                      </Button>
                     </div>
-                  )}
+                    {attachment && (
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-100 rounded-lg text-emerald-600 text-[10px] font-bold uppercase">
+                          <ShieldCheck className="w-3 h-3" /> Slip Attached
+                          <button onClick={() => setAttachment(null)} className="ml-1 hover:text-rose-600">
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                        {attachment.startsWith('data:image') && (
+                          <div 
+                            className="w-12 h-12 rounded-lg border border-slate-200 overflow-hidden shadow-sm cursor-pointer hover:opacity-80 transition-opacity"
+                            onClick={() => window.open('', '_blank')?.document.write(`<img src="${attachment}" style="max-width:100%">`)}
+                          >
+                            <img src={attachment} alt="Preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="w-full lg:w-1/2">
+                  <SignaturePad onSave={setSignatureData} onClear={() => setSignatureData(null)} />
                 </div>
               </div>
               
-              <div className="flex flex-col sm:flex-row justify-end gap-3 w-full sm:w-auto">
+              <div className="flex flex-col sm:flex-row justify-end gap-3 w-full pt-6 border-t border-slate-100">
                 <Button variant="outline" onClick={resetForm} className="w-full sm:w-auto brutal-btn">Clear Form</Button>
-                <Button onClick={handleSave} className="w-full sm:w-auto gap-2 brutal-btn-primary">
+                <Button 
+                  onClick={handleSave} 
+                  disabled={!signatureData}
+                  className={cn(
+                    "w-full sm:w-auto gap-2 brutal-btn-primary transition-all",
+                    !signatureData && "opacity-50 cursor-not-allowed grayscale"
+                  )}
+                >
                   <Save className="w-4 h-4" /> Save Voucher
                 </Button>
               </div>
-            </div>
           </div>
         </div>
       </Tabs>

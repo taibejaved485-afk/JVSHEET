@@ -9,7 +9,7 @@ import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
-import { FileText, Download, Filter, Calendar, Paperclip, ExternalLink, Eye, X } from 'lucide-react';
+import { FileText, Download, Filter, Calendar, Paperclip, ExternalLink, Eye, X, Search, DollarSign } from 'lucide-react';
 import { getAccounts, getLedger } from '../lib/store';
 import { AccountHead } from '../types';
 import { format, isWithinInterval, parseISO, startOfDay, endOfDay } from 'date-fns';
@@ -23,6 +23,7 @@ import { DatePicker } from './ui/date-picker';
 import { Label } from './ui/label';
 import { CountUp } from './ui/count-up';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { Input } from './ui/input';
 
 export default function LedgerReport() {
   const [accounts, setAccounts] = useState<AccountHead[]>([]);
@@ -31,6 +32,9 @@ export default function LedgerReport() {
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [minAmount, setMinAmount] = useState('');
+  const [maxAmount, setMaxAmount] = useState('');
 
   useEffect(() => {
     setAccounts(getAccounts());
@@ -47,20 +51,28 @@ export default function LedgerReport() {
   const selectedAccount = accounts.find(a => a.id === selectedAccountId);
 
   const filteredEntries = ledgerEntries.filter(entry => {
-    if (!startDate && !endDate) return true;
-    
-    const entryDate = parseISO(entry.date);
-    const start = startDate ? startOfDay(parseISO(startDate)) : null;
-    const end = endDate ? endOfDay(parseISO(endDate)) : null;
-
-    if (start && end) {
-      return isWithinInterval(entryDate, { start, end });
-    } else if (start) {
-      return entryDate >= start;
-    } else if (end) {
-      return entryDate <= end;
+    // Date filter
+    let dateMatch = true;
+    if (startDate || endDate) {
+      const entryDate = parseISO(entry.date);
+      const start = startDate ? startOfDay(parseISO(startDate)) : null;
+      const end = endDate ? endOfDay(parseISO(endDate)) : null;
+      if (start && end) dateMatch = isWithinInterval(entryDate, { start, end });
+      else if (start) dateMatch = entryDate >= start;
+      else if (end) dateMatch = entryDate <= end;
     }
-    return true;
+
+    // Search filter (Voucher ID, Description)
+    const searchMatch = !searchTerm || 
+      entry.voucherNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      entry.description.toLowerCase().includes(searchTerm.toLowerCase());
+
+    // Amount filter
+    const amount = Math.max(entry.debit, entry.credit);
+    const minMatch = !minAmount || amount >= (parseFloat(minAmount) || 0);
+    const maxMatch = !maxAmount || amount <= (parseFloat(maxAmount) || Infinity);
+
+    return dateMatch && searchMatch && minMatch && maxMatch;
   });
   
   const handleExportPDF = () => {
@@ -135,8 +147,8 @@ export default function LedgerReport() {
 
       <Card className="glass-card bg-white">
         <CardHeader className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 border-b border-slate-100 p-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 w-full lg:w-auto">
-            <div className="w-full sm:w-64 space-y-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 w-full">
+            <div className="space-y-2">
               <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">Account Head</Label>
               <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
                 <SelectTrigger className="bg-white border border-slate-200 rounded-lg h-10 font-medium text-sm">
@@ -152,28 +164,73 @@ export default function LedgerReport() {
               </Select>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
-              <div className="w-full sm:w-40 space-y-2">
-                <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">From Date</Label>
-                <DatePicker date={startDate} setDate={setStartDate} />
+            <div className="space-y-2">
+              <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">Search</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Input 
+                  placeholder="Voucher #..." 
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 bg-white border-slate-200 rounded-lg h-10 text-xs"
+                />
               </div>
-              <div className="w-full sm:w-40 space-y-2">
-                <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">To Date</Label>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">Date Range</Label>
+              <div className="flex items-center gap-2">
+                <DatePicker date={startDate} setDate={setStartDate} />
+                <span className="text-slate-300">/</span>
                 <DatePicker date={endDate} setDate={setEndDate} />
               </div>
             </div>
+
+            <div className="space-y-2">
+              <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">Amount (Min-Max)</Label>
+              <div className="flex items-center gap-2">
+                <Input 
+                  type="number" 
+                  placeholder="Min" 
+                  value={minAmount}
+                  onChange={(e) => setMinAmount(e.target.value)}
+                  className="bg-white border-slate-200 rounded-lg h-10 text-xs"
+                />
+                <Input 
+                  type="number" 
+                  placeholder="Max" 
+                  value={maxAmount}
+                  onChange={(e) => setMaxAmount(e.target.value)}
+                  className="bg-white border-slate-200 rounded-lg h-10 text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-end gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setSelectedAccountId('');
+                  setStartDate('');
+                  setEndDate('');
+                  setSearchTerm('');
+                  setMinAmount('');
+                  setMaxAmount('');
+                }}
+                className="h-10 px-3 border-slate-200 text-slate-500 hover:text-slate-900 rounded-lg text-xs font-bold uppercase"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+              <Button 
+                onClick={handleExportPDF}
+                disabled={filteredEntries.length === 0}
+                className="h-10 px-4 bg-slate-900 text-white hover:bg-slate-800 rounded-lg text-xs font-bold uppercase flex-1"
+              >
+                <Download className="w-4 h-4 mr-2" /> PDF
+              </Button>
+            </div>
           </div>
 
-          {(startDate || endDate) && (
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={() => { setStartDate(''); setEndDate(''); }}
-              className="text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-slate-900"
-            >
-              Reset Filters
-            </Button>
-          )}
         </CardHeader>
         <CardContent className="p-0">
           {selectedAccountId ? (
